@@ -2,6 +2,7 @@
 const DEFAULT_LLM_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_LLM_MODEL = "gpt-4o-mini";
 const DEFAULT_SYSTEM_PROMPT = "You are a concise and practical AI assistant.";
+const DEFAULT_FEISHU_CONNECTION_MODE = "websocket";
 
 function required(name) {
   const value = (process.env[name] || "").trim();
@@ -34,6 +35,15 @@ function parseBool(name, fallback = false) {
     return fallback;
   }
   return ["1", "true", "yes", "on"].includes(raw);
+}
+
+function parseConnectionMode() {
+  const raw = (process.env.FEISHU_CONNECTION_MODE || "").trim().toLowerCase();
+  const mode = raw || DEFAULT_FEISHU_CONNECTION_MODE;
+  if (mode !== "websocket" && mode !== "webhook") {
+    throw new Error(`Invalid FEISHU_CONNECTION_MODE: ${mode}. Use websocket or webhook.`);
+  }
+  return mode;
 }
 
 function parseScheduleJobs() {
@@ -95,6 +105,7 @@ function loadConfig() {
       appId: required("FEISHU_APP_ID"),
       appSecret: required("FEISHU_APP_SECRET"),
       verifyToken: optional("FEISHU_VERIFY_TOKEN"),
+      connectionMode: parseConnectionMode(),
     },
     llm: {
       apiKey: required("LLM_API_KEY"),

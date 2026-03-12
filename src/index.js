@@ -5,6 +5,7 @@ const cron = require("node-cron");
 
 const { loadConfig } = require("./config");
 const { FeishuClient } = require("./feishu");
+const { startFeishuWebSocket } = require("./feishu-ws");
 const { chatCompletion } = require("./llm");
 const { runInSessionQueue } = require("./queue");
 
@@ -75,7 +76,18 @@ function safeParseFeishuText(contentRaw) {
   }
 }
 
-async function handleIncomingMessage(event) {
+function normalizeInboundEvent(payload) {
+  if (payload && payload.message) {
+    return payload;
+  }
+  if (payload && payload.event && payload.event.message) {
+    return payload.event;
+  }
+  return payload;
+}
+
+async function handleIncomingMessage(payload) {
+  const event = normalizeInboundEvent(payload);
   const message = event?.message;
   if (!message || message.message_type !== "text") {
     return;
@@ -129,6 +141,12 @@ async function handleIncomingMessage(event) {
   });
 }
 
+function enqueueIncomingMessage(payload, source) {
+  handleIncomingMessage(payload).catch((err) => {
+    console.error(`[${source}-event-error] ${String(err)}`);
+  });
+}
+
 function startScheduleJobs() {
   for (const job of config.schedules) {
     if (!cron.validate(job.cron)) {
@@ -170,10 +188,20 @@ function startScheduleJobs() {
 }
 
 app.get("/healthz", (req, res) => {
-  res.json({ ok: true, model: config.llm.model, schedules: config.schedules.length });
+  res.json({
+    ok: true,
+    model: config.llm.model,
+    schedules: config.schedules.length,
+    feishuMode: config.feishu.connectionMode,
+  });
 });
 
 app.post("/webhook/feishu", (req, res) => {
+  if (config.feishu.connectionMode !== "webhook") {
+    res.status(409).json({ error: "Webhook mode disabled. Set FEISHU_CONNECTION_MODE=webhook." });
+    return;
+  }
+
   const body = req.body;
   if (config.runtime.logBody) {
     console.log("[webhook-body]", JSON.stringify(body));
@@ -197,14 +225,27 @@ app.post("/webhook/feishu", (req, res) => {
 
   const eventType = body?.header?.event_type;
   if (eventType === "im.message.receive_v1") {
-    handleIncomingMessage(body.event).catch((err) => {
-      console.error(`[webhook-event-error] ${String(err)}`);
-    });
+    enqueueIncomingMessage(body.event, "webhook");
   }
 });
 
 app.listen(config.port, () => {
   console.log(`mini-openclaw-feishu listening on :${config.port}`);
   console.log(`model=${config.llm.model} base=${config.llm.baseUrl}`);
+  console.log(`feishu_connection_mode=${config.feishu.connectionMode}`);
   startScheduleJobs();
+
+  if (config.feishu.connectionMode === "websocket") {
+    startFeishuWebSocket({
+      appId: config.feishu.appId,
+      appSecret: config.feishu.appSecret,
+      verifyToken: config.feishu.verifyToken,
+      logBody: config.runtime.logBody,
+      onMessage: (event) => {
+        enqueueIncomingMessage(event, "websocket");
+      },
+    });
+  } else {
+    console.log("[feishu-webhook] waiting for callback on POST /webhook/feishu");
+  }
 });

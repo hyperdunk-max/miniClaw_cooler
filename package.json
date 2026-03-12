@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "check": "node --check src/index.js && node --check src/config.js && node --check src/feishu.js && node --check src/llm.js && node --check src/queue.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/feishu.js && node --check src/feishu-ws.js && node --check src/llm.js && node --check src/queue.js",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "deploy:win": "powershell -ExecutionPolicy Bypass -File .\\\\scripts\\\\deploy.ps1",
@@ -18,6 +18,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.59.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "node-cron": "^4.2.1"
