@@ -1,6 +1,10 @@
 ﻿const Lark = require("@larksuiteoapi/node-sdk");
 
 function startFeishuWebSocket(params) {
+  if (!Lark.WSClient) {
+    throw new Error("Feishu SDK does not expose WSClient. Please check @larksuiteoapi/node-sdk version.");
+  }
+
   const dispatcher = new Lark.EventDispatcher({
     verificationToken: params.verifyToken || "",
   }).register({
@@ -16,25 +20,23 @@ function startFeishuWebSocket(params) {
     },
   });
 
-  const wsClient = new Lark.ws.Client({
+  const wsClient = new Lark.WSClient({
     appId: params.appId,
     appSecret: params.appSecret,
-    eventDispatcher: dispatcher,
+    autoReconnect: true,
     loggerLevel: Lark.LoggerLevel.warn,
   });
 
-  wsClient.start({
-    autoReconnect: true,
-    onOpen: () => {
+  wsClient
+    .start({
+      eventDispatcher: dispatcher,
+    })
+    .then(() => {
       console.log("[feishu-ws] connected");
-    },
-    onClose: () => {
-      console.warn("[feishu-ws] disconnected");
-    },
-    onError: (error) => {
+    })
+    .catch((error) => {
       console.error(`[feishu-ws-error] ${String(error)}`);
-    },
-  });
+    });
 
   return wsClient;
 }
